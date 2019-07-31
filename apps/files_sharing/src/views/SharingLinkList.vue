@@ -92,6 +92,11 @@ export default {
 			})
 		},
 
+		/**
+		 * Remove a share from the shares list
+		 * 
+		 * @param {Share} share the share to remove
+		 */
 		removeShare(share) {
 			const index = this.shares.findIndex(item => item === share)
 			this.shares.splice(index, 1)

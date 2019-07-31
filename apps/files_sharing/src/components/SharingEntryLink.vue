@@ -56,7 +56,7 @@
 
 			<!-- password -->
 			<ActionText v-if="pendingPassword" icon="icon-password">
-				{{ t('files_sharing', 'Password protection enforced') }}
+				{{ t('files_sharing', 'Password protection (enforced)') }}
 			</ActionText>
 			<ActionInput  v-if="pendingPassword"
 				:value.sync="share.password"
@@ -69,7 +69,7 @@
 
 			<!-- expiration date -->
 			<ActionText v-if="pendingExpirationDate" icon="icon-calendar-dark">
-				{{ t('files_sharing', 'Select an expiration date') }}
+				{{ t('files_sharing', 'Expiration date (enforced)') }}
 			</ActionText>
 			<ActionInput v-if="pendingExpirationDate"
 				:disabled="saving"
@@ -131,7 +131,7 @@
 						:disabled="config.enforcePasswordForPublicLink || saving"
 						@uncheck="onPasswordDisable">
 						{{ config.enforcePasswordForPublicLink 
-							? t('files_sharing', 'Password protection enforced')
+							? t('files_sharing', 'Password protection (enforced)')
 							: t('files_sharing', 'Password protect') }}
 					</ActionCheckbox>
 					<ActionInput v-if="isPasswordProtected"
@@ -157,7 +157,7 @@
 						:disabled="config.isDefaultExpireDateEnforced || saving"
 						@uncheck="onExpirationDisable">
 						{{ config.isDefaultExpireDateEnforced 
-							? t('files_sharing', 'Expiration date enforced')
+							? t('files_sharing', 'Expiration date (enforced)')
 							: t('files_sharing', 'Set expiration date') }}
 					</ActionCheckbox>
 					<ActionInput v-if="hasExpirationDate"
@@ -375,7 +375,8 @@ export default {
 			const shareDefaults = {}
 			if (this.config.isDefaultExpireDateEnforced) {
 				// default is empty string if not set
-				shareDefaults.expireDate = this.config.defaultExpirationDateString
+				// expiration is the share object key, not expireDate
+				shareDefaults.expiration = this.config.defaultExpirationDateString
 			}
 
 			// do not push yet if we need a password or an expiration date

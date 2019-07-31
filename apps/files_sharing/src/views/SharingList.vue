@@ -22,11 +22,14 @@
 
 <template>
 	<ul>
-		<SharingEntry v-for="share in shares" :key="share.id" :file-info="fileInfo" :share="share" />
+		<SharingEntry v-for="share in shares" :key="share.id"
+			:file-info="fileInfo" :share="share"
+			@remove:share="removeShare" />
 	</ul>
 </template>
 
 <script>
+import Share from '../models/Share'
 import SharingEntry from '../components/SharingEntry'
 
 export default {
@@ -56,6 +59,15 @@ export default {
 	},
 
 	methods: {
+		/**
+		 * Remove a share from the shares list
+		 * 
+		 * @param {Share} share the share to remove
+		 */
+		removeShare(share) {
+			const index = this.shares.findIndex(item => item === share)
+			this.shares.splice(index, 1)
+		}
 	}
 }
 </script>

@@ -70,7 +70,7 @@ export default class Config {
 			const date = window.moment.utc()
 			const expireAfterDays = this.defaultExpireDate
 			date.add(expireAfterDays, 'days')
-			expireDateString = date.format('YYYY-MM-DD 00:00:00')
+			expireDateString = date.format('YYYY-MM-DD')
 		}
 		return expireDateString
 	}

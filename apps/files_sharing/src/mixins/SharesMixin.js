@@ -111,7 +111,8 @@ export default {
 		},
 
 		dateMaxEnforced() {
-			return this.config.isDefaultExpireDateEnforced && moment().add(1 + this.config.defaultExpireDate, 'days')
+			return this.config.isDefaultExpireDateEnforced
+				&& moment().add(1 + this.config.defaultExpireDate, 'days')
 		},
 
 		/**
