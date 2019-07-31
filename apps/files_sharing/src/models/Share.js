@@ -147,6 +147,17 @@ export default class Share {
 			|| this.#share.share_with
 	}
 
+	/**
+	 * Get the share with avatar if any
+	 *
+	 * @returns {string}
+	 * @readonly
+	 * @memberof Share
+	 */
+	get shareWithAvatar() {
+		return this.#share.share_with_avatar
+	}
+
 	// SHARED FILE OR FOLDER OWNER ----------------------------------
 	/**
 	 * Get the shared item owner uid
@@ -383,6 +394,17 @@ export default class Share {
 	 */
 	get hasUpdatePermission() {
 		return (this.permissions & OC.PERMISSION_UPDATE) ? true : false;
+	}
+
+	/**
+	 * Does this share have share Permissions
+	 *
+	 * @returns {boolean}
+	 * @readonly
+	 * @memberof Share
+	 */
+	get hasSharePermission() {
+		return (this.permissions & OC.PERMISSION_SHARE) ? true : false;
 	}
 
 

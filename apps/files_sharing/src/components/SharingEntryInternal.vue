@@ -64,7 +64,7 @@ export default {
 				return t('files_sharing', 'Only works for users with access to this folder')
 			}
 			return t('files_sharing', 'Only works for users with access to this file')
-		},
+		}
 	},
 
 	methods: {		

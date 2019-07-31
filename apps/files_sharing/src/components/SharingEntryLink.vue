@@ -24,7 +24,7 @@
 	<li :class="{'sharing-entry--share': share}" class="sharing-entry">
 		<Avatar :isNoUser="true" class="sharing-entry__avatar icon-public-white" />
 		<div class="sharing-entry__desc">
-			<h4>{{ title }}</h4>
+			<h5>{{ title }}</h5>
 		</div>
 
 		<!-- clipboard -->
@@ -129,7 +129,7 @@
 					<!-- password -->
 					<ActionCheckbox :checked.sync="isPasswordProtected"
 						:disabled="config.enforcePasswordForPublicLink || saving"
-						@uncheck="queueUpdate('password')">
+						@uncheck="onPasswordDisable">
 						{{ config.enforcePasswordForPublicLink 
 							? t('files_sharing', 'Password protection enforced')
 							: t('files_sharing', 'Password protect') }}
@@ -155,7 +155,7 @@
 					<!-- expiration date -->
 					<ActionCheckbox :checked.sync="hasExpirationDate"
 						:disabled="config.isDefaultExpireDateEnforced || saving"
-						@uncheck="queueUpdate('expireDate')">
+						@uncheck="onExpirationDisable">
 						{{ config.isDefaultExpireDateEnforced 
 							? t('files_sharing', 'Expiration date enforced')
 							: t('files_sharing', 'Set expiration date') }}
@@ -219,10 +219,8 @@
 </template>
 
 <script>
-import { generateOcsUrl, generateUrl } from 'nextcloud-router/dist/index'
+import { generateUrl } from 'nextcloud-router/dist/index'
 import axios from 'nextcloud-axios'
-import PQueue from 'p-queue'
-import debounce from 'debounce'
 
 import ActionButton from 'nextcloud-vue/dist/Components/ActionButton'
 import ActionCheckbox from 'nextcloud-vue/dist/Components/ActionCheckbox'
@@ -234,11 +232,10 @@ import Actions from 'nextcloud-vue/dist/Components/Actions'
 import Avatar from 'nextcloud-vue/dist/Components/Avatar'
 import Tooltip from 'nextcloud-vue/dist/Directives/Tooltip'
 
-import Config from '../services/ConfigService'
-import Share from '../models/Share';
+import Share from '../models/Share'
 import SharesMixin from '../mixins/SharesMixin'
 
-const updateQueue = new PQueue({ concurrency: 1 })
+const passwordSet = 'abcdefgijkmnopqrstwxyzABCDEFGHJKLMNPQRSTWXYZ23456789'
 
 export default {
 	name: 'SharingEntryLink',
@@ -260,35 +257,10 @@ export default {
 		Tooltip
 	},
 
-	props: {
-		fileInfo: {
-			type: Object,
-			default: () => {},
-			required: true
-		},
-		share: {
-			type: Share,
-			default: null
-		}
-	},
-
 	data() {
 		return {
-			config: new Config(),
 			copySuccess: true,
 			copied: false,
-
-			errors: {},
-			errorTimeout: null,
-
-			loading: false,
-			saving: false,
-			open: false,
-			/**
-			 * ! This allow vue to make the Share class state reactive
-			 * ! do not remove it ot you'll lose all reactivity here
-			 */
-			reactiveState: this.share && this.share.state,
 
 			publicUploadRWValue: OC.PERMISSION_UPDATE | OC.PERMISSION_CREATE | OC.PERMISSION_READ | OC.PERMISSION_DELETE,
 			publicUploadRValue: OC.PERMISSION_READ,
@@ -307,6 +279,21 @@ export default {
 				return this.share.label
 			}
 			return t('files_sharing', 'Share link')
+		},
+		
+
+		/**
+		 * Is the current share password protected ?
+		 * @returns {boolean}
+		 */
+		isPasswordProtected: {
+			get: function() {
+				return this.config.enforcePasswordForPublicLink || !!this.share.password
+			},
+			set: async function(enabled) {
+				// TODO: directly save after generation to make sure the share is always protected
+				this.share.password = enabled ? await this.generatePassword() : ''
+			}
 		},
 
 		/**
@@ -333,52 +320,6 @@ export default {
 				this.share.permissions = enabled
 					? OC.PERMISSION_READ | OC.PERMISSION_UPDATE
 					: OC.PERMISSION_READ
-			}
-		},
-
-		/**
-		 * Is the current share password protected ?
-		 * @returns {boolean}
-		 */
-		isPasswordProtected: {
-			get: function() {
-				return this.config.enforcePasswordForPublicLink || !!this.share.password
-			},
-			set: function(enabled) {
-				// TODO: directly save after generation to make sure the share is always protected
-				this.share.password = enabled ? this.generatePassword() : ''
-			}
-		},
-
-		/**
-		 * Does the current share have an expiration date
-		 * @returns {boolean}
-		 */
-		hasExpirationDate: {
-			get: function() {
-				return this.config.isDefaultExpireDateEnforced || !!this.share.expireDate
-			},
-			set: function(enabled) {
-				this.share.expireDate = enabled
-					? this.config.defaultExpirationDateString !== ''
-						? this.config.defaultExpirationDateString
-						: moment().format('YYYY-MM-DD')
-					: ''
-			}
-		},
-
-		/**
-		 * Does the current share have a note
-		 * @returns {boolean}
-		 */
-		hasNote: {
-			get: function() {
-				return !!this.share.note
-			},
-			set: function(enabled) {
-				this.share.note = enabled
-					? t('files_sharing', 'Enter a note for the share recipient')
-					: ''
 			}
 		},
 
@@ -423,14 +364,6 @@ export default {
 					: t('files_sharing', 'Cannot copy, please copy the link manually')
 			}
 			return t('files_sharing', 'Copy to clipboard')
-		},
-
-		dateTomorrow() {
-			return moment().add(1, 'days')
-		},
-
-		dateMaxEnforced() {
-			return this.config.isDefaultExpireDateEnforced && moment().add(1 + this.config.defaultExpireDate, 'days')
 		}
 	},
 
@@ -447,6 +380,7 @@ export default {
 
 			// do not push yet if we need a password or an expiration date
 			if (this.config.enforcePasswordForPublicLink || this.config.isDefaultExpireDateEnforced) {
+				this.loading = true
 				// if a share already exists, pushing it
 				if (this.share && !this.share.id) {
 					if (this.checkShare(this.share)) {
@@ -459,12 +393,10 @@ export default {
 					}
 				}
 
-				console.info(shareDefaults);
-
 				// ELSE, show the pending popovermenu
 				// if password enforced, pre-fill with random one
 				if (this.config.enforcePasswordForPublicLink) {
-					shareDefaults.password = this.generatePassword()
+					shareDefaults.password = await this.generatePassword()
 				}
 
 				// create share & close menu
@@ -476,6 +408,7 @@ export default {
 				// open the menu on the
 				// freshly created share component
 				this.open = false
+				this.loading = false
 				component.open = true
 			
 			// Nothing enforced, creating share directly
@@ -483,10 +416,6 @@ export default {
 				const share = new Share(shareDefaults)
 				await this.pushNewLinkShare(share)
 			}
-		},
-
-		updated() {
-			console.info('updated');
 		},
 
 		async pushNewLinkShare(share) {
@@ -538,34 +467,38 @@ export default {
 			}
 		},
 
-		async onDelete() {
-			try {
-				this.loading = true
-				this.open = false
-				await this.deleteShare(this.share.id)
-				console.debug('Link share deleted', this.share.id);
-				this.$emit('remove:share', this.share)
-			} catch(error) {
-				// re-open menu if error
-				this.open = true
-			} finally {
-				this.loading = false
-			}
-		},
-
-		openMenu() {
-			this.open = true
-		},
-
-		togglePermissions(e) {
-			const permissions = parseInt(e.target.value, 10)
+		/**
+		 * On permissions change
+		 */
+		togglePermissions(event) {
+			const permissions = parseInt(event.target.value, 10)
 			this.share.permissions = permissions
 			this.queueUpdate('permissions')
 		},
 
-		generatePassword() {
-			// ! TODO add default password / generate with password policy
-			return 'password'
+		/**
+		 * Generate a valid policy password or
+		 * request a valid password if password_policy
+		 * is enabled
+		 * 
+		 * @returns {string} a valid password
+		 */
+		async generatePassword() {
+			if (this.config.passwordPolicy.api && this.config.passwordPolicy.api.generate) {
+				try {
+					const request = await axios.get(this.config.passwordPolicy.api.generate)
+					if (request.data.ocs.data.password) {
+						return request.data.ocs.data.password
+					}
+				} catch(error) {
+					console.info('Error generating password from password_policy', error);
+				}
+			}
+			// generate password of 10 length based on passwordSet
+			return Array(10).fill(0)
+				.reduce((prev, curr) => {
+					return prev += passwordSet.charAt(Math.floor(Math.random() * passwordSet.length))
+				}, '')
 		},
 		
 		async copyLink() {
@@ -586,18 +519,6 @@ export default {
 		},
 
 		/**
-		 * ActionInput can be a little tricky to work with.
-		 * Since we expect a string and not a Date,
-		 * we need to process the value here
-		 */
-		onExpirationChange(date) {
-			// format to YYYY-MM-DD
-			const value = moment(date).format('YYYY-MM-DD')
-			this.share.expireDate = value
-			this.queueUpdate('expireDate')
-		},
-
-		/**
 		 * Update password and newPassword values
 		 * of share. If password is set but not newPassword
 		 * then the user did not changed the password
@@ -608,6 +529,17 @@ export default {
 		onPasswordChange(password) {
 			this.$set(this.share, 'newPassword', password)
 			this.share.password = password
+		},
+
+		/**
+		 * Uncheck password protection
+		 * We need this method because @update:checked
+		 * is ran simultaneously as @uncheck, so
+		 * so we cannot ensure data is up-to-date
+		 */
+		onPasswordDisable() {
+			this.share.password = ''
+			this.queueUpdate('password')
 		},
 
 		/**
@@ -624,78 +556,6 @@ export default {
 				this.queueUpdate('password')
 			}
 		},
-
-		/**
-		 * Send an update of the share to the queue
-		 *
-		 * @param {string} property the property to sync
-		 */
-		queueUpdate(property) {
-			const value = this.share[property]
-			updateQueue.add(async () => {
-				this.saving = true
-				try {
-					await this.updateShare(this.share.id, {
-						property,
-						value
-					})
-
-					// reset password state after sync
-					if (property === 'password') {
-						this.$delete(this.share, 'newPassword')
-					}
-					// clear any previous errors
-					this.$delete(this.errors, property)
-				} catch({ property, message }) {
-					this.onSyncError(property, message)
-				} finally {
-					this.saving = false
-				}
-			})
-		},
-
-		/**
-		 * Manage sync errors
-		 * @param {string} property the errored property, e.g. 'password'
-		 * @param {string} message the error message
-		 */
-		onSyncError(property, message) {
-			// re-open menu if closed
-			this.open = true
-			switch (property) {
-				case 'password':
-				case 'pending':
-				case 'expireDate':
-				case 'note':
-					// show error
-					this.$set(this.errors, property, message)
-
-					// Reset errors after  4 seconds
-					clearTimeout(this.errorTimeout)
-					this.errorTimeout = setTimeout(() => {
-						this.errors = {}
-					}, 4000)
-
-					if (this.$refs[property]) {
-						// focus if there is a focusable action element
-						const focusable = this.$refs[property].querySelector('.focusable')
-						if (focusable) {
-							focusable.focus()
-						}
-					}
-					break;
-			}
-		},
-
-		/**
-		 * Debounce queueUpdate to avoid requests spamming
-		 * more importantly for text data
-		 * 
-		 * @param {string} property the property to sync
-		 */
-		debounceQueueUpdate: debounce(function(property) {
-			this.queueUpdate(property)
-		}, 500),
 
 		/**
 		 * Cancel the share creation

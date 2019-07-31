@@ -23,12 +23,83 @@
 <template>
 	<li class="sharing-entry">
 		<Avatar class="sharing-entry__avatar" :user="share.shareWith"
-			:display-name="share.shareWithDisplayName" />
+			:display-name="share.shareWithDisplayName"
+			:url="share.shareWithAvatar" />
 		<div class="sharing-entry__desc" v-tooltip.auto="tooltip">
-			<h4>{{ title }}</h4>
+			<h5>{{ title }}</h5>
 		</div>
 		<Actions menu-align="right" class="sharing-entry__actions">
-			<slot />
+			<!-- edit permission -->
+			<ActionCheckbox
+				ref="canEdit"
+				:checked.sync="canEdit"
+				:value="permissionsEdit"
+				:disabled="saving">
+				{{ t('files_sharing', 'Allow editing') }}
+			</ActionCheckbox>
+
+			<!-- reshare permission -->
+			<ActionCheckbox
+				ref="canReshare"
+				:checked.sync="canReshare"
+				:value="permissionsShare"
+				:disabled="saving">
+				{{ t('files_sharing', 'Can reshare') }}
+			</ActionCheckbox>
+			
+			<!-- expiration date -->
+			<ActionCheckbox :checked.sync="hasExpirationDate"
+				:disabled="config.isDefaultExpireDateEnforced || saving"
+				@uncheck="onExpirationDisable">
+				{{ config.isDefaultExpireDateEnforced 
+					? t('files_sharing', 'Expiration date enforced')
+					: t('files_sharing', 'Set expiration date') }}
+			</ActionCheckbox>
+			<ActionInput v-if="hasExpirationDate"
+				:class="{ error: errors.expireDate}"
+				:disabled="saving"
+				:first-day-of-week="firstDay"
+				:lang="lang"
+				:value="share.expireDate"
+				icon="icon-calendar-dark"
+				ref="expireDate"
+				type="date"
+				v-tooltip.auto="{
+					content: errors.expireDate,
+					show: errors.expireDate,
+					trigger: 'manual'
+				}"
+				:not-before="dateTomorrow"
+				:not-after="dateMaxEnforced"
+				@update:value="onExpirationChange">
+				{{ t('files_sharing', 'Enter a date') }}
+			</ActionInput>
+			
+			<!-- note -->
+			<template v-if="canHaveNote">
+				<ActionCheckbox
+					:checked.sync="hasNote"
+					:disabled="saving"
+					@uncheck="queueUpdate('note')">
+					{{ t('files_sharing', 'Note to recipient') }}
+				</ActionCheckbox>
+				<ActionTextEditable v-if="hasNote"
+					:class="{ error: errors.note}"
+					:disabled="saving"
+					:value.sync="share.note"
+					icon="icon-edit"
+					ref="note"
+					v-tooltip.auto="{
+						content: errors.note,
+						show: errors.note,
+						trigger: 'manual'
+					}"
+					@update:value="debounceQueueUpdate('note')" />
+			</template>
+		
+			<ActionButton icon="icon-delete" :disabled="saving" @click.prevent="onDelete">
+				{{ t('files_sharing', 'Unshare') }}
+			</ActionButton>
 		</Actions>
 	</li>
 </template>
@@ -36,9 +107,16 @@
 <script>
 import Avatar from 'nextcloud-vue/dist/Components/Avatar'
 import Actions from 'nextcloud-vue/dist/Components/Actions'
+import ActionButton from 'nextcloud-vue/dist/Components/ActionButton'
+import ActionCheckbox from 'nextcloud-vue/dist/Components/ActionCheckbox'
+import ActionInput from 'nextcloud-vue/dist/Components/ActionInput'
+import ActionText from 'nextcloud-vue/dist/Components/ActionText'
+import ActionTextEditable from 'nextcloud-vue/dist/Components/ActionTextEditable'
+import ActionLink from 'nextcloud-vue/dist/Components/ActionLink'
 import Tooltip from 'nextcloud-vue/dist/Directives/Tooltip'
 
 import Share from '../models/Share'
+import SharesMixin from '../mixins/SharesMixin'
 
 const SHARE_TYPES = {
 	SHARE_TYPE_USER: OC.Share.SHARE_TYPE_USER, 
@@ -57,6 +135,12 @@ export default {
 
 	components: {
 		Actions,
+		ActionButton,
+		ActionCheckbox,
+		ActionInput,
+		ActionText,
+		ActionTextEditable,
+		ActionLink,
 		Avatar
 	},
 
@@ -64,22 +148,13 @@ export default {
 		Tooltip
 	},
 
-	props: {
-		fileInfo: {
-			type: Object,
-			default: () => {},
-			required: true
-		},
-		share: {
-			type: Share,
-			required: true,
-			default: () => new Share({})
-		}
-	},
+	mixins: [SharesMixin],
 
 	data() {
 		return {
-			
+			permissionsEdit: OC.PERMISSION_UPDATE,
+			permissionsRead: OC.PERMISSION_READ,
+			permissionsShare: OC.PERMISSION_SHARE,
 		}
 	},
 
@@ -93,6 +168,7 @@ export default {
 			}
 			return title
 		},
+
 		tooltip() {
 			if (this.share.owner !== this.share.uidFileOwner) {
 				const data = {
@@ -110,11 +186,49 @@ export default {
 
 				return t('files_sharing', 'Shared with {user} by {owner}', data)
 			}
-		}
+		},
+
+		canHaveNote() {
+			return this.share.type !== SHARE_TYPES.SHARE_TYPE_REMOTE
+				&& this.share.type !== SHARE_TYPES.SHARE_TYPE_REMOTE_GROUP
+		},
+
+		/**
+		 * Can the sharee edit the shared file ?
+		 */
+		canEdit: {
+			get: function() {
+				return this.share.hasUpdatePermission
+			},
+			set: function(checked) {
+				this.updatePermissions(checked, this.canReshare)
+			}
+		},
+
+		/**
+		 * Can the sharee reshare the file ?
+		 */
+		canReshare: {
+			get: function() {
+				return this.share.hasSharePermission
+			},
+			set: function(checked) {
+				this.updatePermissions(this.canEdit, checked)
+			}
+		},
+
 	},
 
 	methods: {
-		
+		updatePermissions(isEditChecked, isReshareChecked) {
+			// calc permissions if checked
+			const permissions = this.permissionsRead |
+				(isEditChecked ? this.permissionsEdit : 0) |
+				(isReshareChecked ? this.permissionsShare : 0)
+
+			this.share.permissions = permissions
+			this.queueUpdate('permissions')
+		}
 	},
 
 }

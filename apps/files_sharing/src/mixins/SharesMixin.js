@@ -22,16 +22,124 @@
 
 import { generateOcsUrl } from 'nextcloud-router/dist/index'
 import axios from 'nextcloud-axios'
+import PQueue from 'p-queue'
+import debounce from 'debounce'
 
 import Share from '../models/Share'
+import Config from '../services/ConfigService'
 
 const shareUrl = generateOcsUrl('apps/files_sharing/api/v1', 2) + 'shares'
-const format = 'json'
 const headers = {
 	'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
 };
 
 export default {
+	props: {
+		fileInfo: {
+			type: Object,
+			default: () => {},
+			required: true
+		},
+		share: {
+			type: Share,
+			default: null
+		}
+	},
+
+	data() {
+		return {
+			config: new Config(),
+
+			// errors helpers
+			errors: {},
+			errorTimeout: null,
+
+			// component status toggles
+			loading: false,
+			saving: false,
+			open: false,
+
+			// concurrency management queue
+			// we want one queue per share
+			updateQueue: new PQueue({ concurrency: 1 }),
+
+			/**
+			 * ! This allow vue to make the Share class state reactive
+			 * ! do not remove it ot you'll lose all reactivity here
+			 */
+			reactiveState: this.share && this.share.state,
+		}
+	},
+
+	computed: {
+
+		/**
+		 * Does the current share have an expiration date
+		 * @returns {boolean}
+		 */
+		hasExpirationDate: {
+			get: function() {
+				return this.config.isDefaultExpireDateEnforced || !!this.share.expireDate
+			},
+			set: function(enabled) {
+				this.share.expireDate = enabled
+					? this.config.defaultExpirationDateString !== ''
+						? this.config.defaultExpirationDateString
+						: moment().format('YYYY-MM-DD')
+					: ''
+			}
+		},
+
+		/**
+		 * Does the current share have a note
+		 * @returns {boolean}
+		 */
+		hasNote: {
+			get: function() {
+				return !!this.share.note
+			},
+			set: function(enabled) {
+				this.share.note = enabled
+					? t('files_sharing', 'Enter a note for the share recipient')
+					: ''
+			}
+		},
+
+
+		dateTomorrow() {
+			return moment().add(1, 'days')
+		},
+
+		dateMaxEnforced() {
+			return this.config.isDefaultExpireDateEnforced && moment().add(1 + this.config.defaultExpireDate, 'days')
+		},
+
+		/**
+		 * Datepicker lang values
+		 * https://github.com/nextcloud/nextcloud-vue/pull/146
+		 * TODO: have this in vue-components
+		 */
+		firstDay() {
+			return window.firstDay
+				? window.firstDay
+				: 0 // sunday as default
+		},
+		lang() {
+			// fallback to default in case of unavailable data
+			return {
+				days: window.dayNamesShort
+					? window.dayNamesShort			// provided by nextcloud
+					: ['Sun.', 'Mon.', 'Tue.', 'Wed.', 'Thu.', 'Fri.', 'Sat.'],
+				months: window.monthNamesShort
+					? window.monthNamesShort		// provided by nextcloud
+					: ['Jan.', 'Feb.', 'Mar.', 'Apr.', 'May.', 'Jun.', 'Jul.', 'Aug.', 'Sep.', 'Oct.', 'Nov.', 'Dec.'],
+				placeholder: {
+					date: 'Select Date' // TODO: Translate
+				}
+			}
+		}
+	},
+
 	methods: {
 
 		/**
@@ -122,27 +230,119 @@ export default {
 				}
 			}
 			return true
-		}
-	},
-	computed: {
-		firstDay() {
-			return window.firstDay
-				? window.firstDay
-				: 0 // sunday as default
 		},
-		lang() {
-			// fallback to default in case of unavailable data
-			return {
-				days: window.dayNamesShort
-					? window.dayNamesShort			// provided by nextcloud
-					: ['Sun.', 'Mon.', 'Tue.', 'Wed.', 'Thu.', 'Fri.', 'Sat.'],
-				months: window.monthNamesShort
-					? window.monthNamesShort		// provided by nextcloud
-					: ['Jan.', 'Feb.', 'Mar.', 'Apr.', 'May.', 'Jun.', 'Jul.', 'Aug.', 'Sep.', 'Oct.', 'Nov.', 'Dec.'],
-				placeholder: {
-					date: 'Select Date' // TODO: Translate
-				}
+
+		/**
+		 * ActionInput can be a little tricky to work with.
+		 * Since we expect a string and not a Date,
+		 * we need to process the value here
+		 */
+		onExpirationChange(date) {
+			// format to YYYY-MM-DD
+			const value = moment(date).format('YYYY-MM-DD')
+			this.share.expireDate = value
+			this.queueUpdate('expireDate')
+		},
+
+		/**
+		 * Uncheck expire date
+		 * We need this method because @update:checked
+		 * is ran simultaneously as @uncheck, so
+		 * so we cannot ensure data is up-to-date
+		 */
+		onExpirationDisable() {
+			this.share.expireDate = ''
+			this.queueUpdate('expireDate')
+		},
+
+		/**
+		 * Delete share button handler
+		 */
+		async onDelete() {
+			try {
+				this.loading = true
+				this.open = false
+				await this.deleteShare(this.share.id)
+				console.debug('Share deleted', this.share.id);
+				this.$emit('remove:share', this.share)
+			} catch(error) {
+				// re-open menu if error
+				this.open = true
+			} finally {
+				this.loading = false
 			}
-		}
-	},
+		},
+
+		/**
+		 * Send an update of the share to the queue
+		 *
+		 * @param {string} property the property to sync
+		 */
+		queueUpdate(property) {
+			const value = this.share[property]
+			this.updateQueue.add(async () => {
+				this.saving = true
+				try {
+					await this.updateShare(this.share.id, {
+						property,
+						value
+					})
+
+					// reset password state after sync
+					if (property === 'password') {
+						this.$delete(this.share, 'newPassword')
+					}
+					// clear any previous errors
+					this.$delete(this.errors, property)
+				} catch({ property, message }) {
+					this.onSyncError(property, message)
+				} finally {
+					this.saving = false
+				}
+			})
+		},
+
+		/**
+		 * Manage sync errors
+		 * @param {string} property the errored property, e.g. 'password'
+		 * @param {string} message the error message
+		 */
+		onSyncError(property, message) {
+			// re-open menu if closed
+			this.open = true
+			switch (property) {
+				case 'password':
+				case 'pending':
+				case 'expireDate':
+				case 'note':
+					// show error
+					this.$set(this.errors, property, message)
+
+					// Reset errors after  4 seconds
+					clearTimeout(this.errorTimeout)
+					this.errorTimeout = setTimeout(() => {
+						this.errors = {}
+					}, 4000)
+
+					if (this.$refs[property]) {
+						// focus if there is a focusable action element
+						const focusable = this.$refs[property].querySelector('.focusable')
+						if (focusable) {
+							focusable.focus()
+						}
+					}
+					break;
+			}
+		},
+
+		/**
+		 * Debounce queueUpdate to avoid requests spamming
+		 * more importantly for text data
+		 * 
+		 * @param {string} property the property to sync
+		 */
+		debounceQueueUpdate: debounce(function(property) {
+			this.queueUpdate(property)
+		}, 500),
+	}
 }

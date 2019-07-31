@@ -24,7 +24,7 @@
 	<li class="sharing-entry">
 		<slot name="avatar" />
 		<div class="sharing-entry__desc" v-tooltip="tooltip">
-			<h4>{{ title }}</h4>
+			<h5>{{ title }}</h5>
 			<p v-if="subtitle">{{ subtitle }}</p>
 		</div>
 		<Actions v-if="$slots['default']" menu-align="right" class="sharing-entry__actions">
