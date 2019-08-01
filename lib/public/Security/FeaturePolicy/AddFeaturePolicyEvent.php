@@ -36,6 +36,9 @@ class AddFeaturePolicyEvent extends Event {
 	/** @var FeaturePolicyManager */
 	private $policyManager;
 
+	/**
+	 * @since 17.0.0
+	 */
 	public function __construct(FeaturePolicyManager $policyManager) {
 		$this->policyManager = $policyManager;
 	}
