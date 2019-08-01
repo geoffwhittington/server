@@ -22,13 +22,15 @@
 
 <template>
 	<li :class="{'sharing-entry--share': share}" class="sharing-entry">
-		<Avatar :isNoUser="true" class="sharing-entry__avatar icon-public-white" />
+		<Avatar :isNoUser="true"
+			:class="isEmailShareType ? 'icon-mail-white' : 'icon-public-white'"
+			class="sharing-entry__avatar" />
 		<div class="sharing-entry__desc">
 			<h5>{{ title }}</h5>
 		</div>
 
 		<!-- clipboard -->
-		<Actions ref="copyButton" v-if="share && share.token"
+		<Actions ref="copyButton" v-if="share && !isEmailShareType  && share.token"
 			:disable-tooltip="true" class="sharing-entry__copy"
 			v-tooltip.auto="{
 				// make sure to manually show the tooltip aagain after click
@@ -200,9 +202,11 @@
 						@update:value="debounceQueueUpdate('note')" />
 
 					<ActionButton icon="icon-delete" :disabled="saving" @click.prevent="onDelete">
-						{{ t('files_sharing', 'Delete share link') }}
+						{{ t('files_sharing', 'Delete share') }}
 					</ActionButton>
-					<ActionButton class="new-share-link" icon="icon-add" @click.prevent.stop="onNewLinkShare">
+					<ActionButton v-if="!isEmailShareType"
+						class="new-share-link" icon="icon-add"
+						@click.prevent.stop="onNewLinkShare">
 						{{ t('files_sharing', 'Add another link') }}
 					</ActionButton>
 				</template>
@@ -278,6 +282,9 @@ export default {
 			if (this.share && this.share.label && this.share.label.trim() !== '') {
 				return this.share.label
 			}
+			if (this.share && this.isEmailShareType) {
+				return this.share.shareWith
+			}
 			return t('files_sharing', 'Share link')
 		},
 		
@@ -288,12 +295,24 @@ export default {
 		 */
 		isPasswordProtected: {
 			get: function() {
-				return this.config.enforcePasswordForPublicLink || !!this.share.password
+				return this.config.enforcePasswordForPublicLink
+					|| !!this.share.password
 			},
 			set: async function(enabled) {
 				// TODO: directly save after generation to make sure the share is always protected
 				this.share.password = enabled ? await this.generatePassword() : ''
+				this.share.newPassword = this.share.password
 			}
+		},
+
+		/**
+		 * Is the current share an email share ?
+		 * @returns {boolean}
+		 */
+		isEmailShareType() {
+			return this.share
+				? this.share.type === this.SHARE_TYPES.SHARE_TYPE_EMAIL
+				: false
 		},
 
 		/**
@@ -378,6 +397,9 @@ export default {
 				// expiration is the share object key, not expireDate
 				shareDefaults.expiration = this.config.defaultExpirationDateString
 			}
+			if (this.config.enableLinkPasswordByDefault) {
+				shareDefaults.password = await this.generatePassword()
+			}
 
 			// do not push yet if we need a password or an expiration date
 			if (this.config.enforcePasswordForPublicLink || this.config.isDefaultExpireDateEnforced) {
@@ -385,7 +407,7 @@ export default {
 				// if a share already exists, pushing it
 				if (this.share && !this.share.id) {
 					if (this.checkShare(this.share)) {
-						await this.pushNewLinkShare(this.share)
+						await this.pushNewLinkShare(this.share, true)
 						return true
 					} else {
 						this.open = true
@@ -419,7 +441,15 @@ export default {
 			}
 		},
 
-		async pushNewLinkShare(share) {
+		/**
+		 * Push a new link share to the server
+		 * And update or append to the list
+		 * accordingly
+		 * 
+		 * @param {Share} share the new share
+		 * @param {boolean} [update=false] do we update the current share ?
+		 */
+		async pushNewLinkShare(share, update) {
 			try {
 				this.loading = true
 				this.open = false
@@ -441,7 +471,7 @@ export default {
 
 				// if share already exists, copy link directly on next tick
 				let component
-				if (share) {
+				if (update) {
 					component = await new Promise(resolve => {
 						this.$emit('update:share', newShare, resolve)
 					})

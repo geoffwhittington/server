@@ -118,18 +118,6 @@ import Tooltip from 'nextcloud-vue/dist/Directives/Tooltip'
 import Share from '../models/Share'
 import SharesMixin from '../mixins/SharesMixin'
 
-const SHARE_TYPES = {
-	SHARE_TYPE_USER: OC.Share.SHARE_TYPE_USER, 
-	SHARE_TYPE_GROUP: OC.Share.SHARE_TYPE_GROUP, 
-	SHARE_TYPE_LINK: OC.Share.SHARE_TYPE_LINK, 
-	SHARE_TYPE_EMAIL: OC.Share.SHARE_TYPE_EMAIL, 
-	SHARE_TYPE_REMOTE: OC.Share.SHARE_TYPE_REMOTE, 
-	SHARE_TYPE_CIRCLE: OC.Share.SHARE_TYPE_CIRCLE, 
-	SHARE_TYPE_GUEST: OC.Share.SHARE_TYPE_GUEST, 
-	SHARE_TYPE_REMOTE_GROUP: OC.Share.SHARE_TYPE_REMOTE_GROUP,
-	SHARE_TYPE_ROOM: OC.Share.SHARE_TYPE_ROOM
-}
-
 export default {
 	name: 'SharingEntry',
 
@@ -161,10 +149,14 @@ export default {
 	computed: {
 		title() {
 			let title = this.share.shareWithDisplayName
-			if (this.share.type === SHARE_TYPES.SHARE_TYPE_GROUP) {
+			if (this.share.type === this.SHARE_TYPES.SHARE_TYPE_GROUP) {
 				title += ` (${ t('files_sharing', 'group') })`
-			} else if (this.share.type === SHARE_TYPES.SHARE_TYPE_ROOM) {
+			} else if (this.share.type === this.SHARE_TYPES.SHARE_TYPE_ROOM) {
 				title += ` (${ t('files_sharing', 'conversation') })`
+			} else if (this.share.type === this.SHARE_TYPES.SHARE_TYPE_REMOTE) {
+				title += ` (${ t('files_sharing', 'remote') })`
+			} else if (this.share.type === this.SHARE_TYPES.SHARE_TYPE_REMOTE_GROUP) {
+				title += ` (${ t('files_sharing', 'remote group') })`
 			}
 			return title
 		},
@@ -178,9 +170,9 @@ export default {
 					owner: this.share.owner
 				}
 				
-				if (this.share.type === SHARE_TYPES.SHARE_TYPE_GROUP) {
+				if (this.share.type === this.SHARE_TYPES.SHARE_TYPE_GROUP) {
 					return t('files_sharing', 'Shared with the group {user} by {owner}', data)
-				} else if (this.share.type === SHARE_TYPES.SHARE_TYPE_ROOM) {
+				} else if (this.share.type === this.SHARE_TYPES.SHARE_TYPE_ROOM) {
 					return t('files_sharing', 'Shared with the conversation {user} by {owner}', data)
 				}
 
@@ -189,8 +181,8 @@ export default {
 		},
 
 		canHaveNote() {
-			return this.share.type !== SHARE_TYPES.SHARE_TYPE_REMOTE
-				&& this.share.type !== SHARE_TYPES.SHARE_TYPE_REMOTE_GROUP
+			return this.share.type !== this.SHARE_TYPES.SHARE_TYPE_REMOTE
+				&& this.share.type !== this.SHARE_TYPES.SHARE_TYPE_REMOTE_GROUP
 		},
 
 		/**

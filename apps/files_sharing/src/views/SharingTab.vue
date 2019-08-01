@@ -63,6 +63,7 @@ import axios from 'nextcloud-axios'
 
 import { shareWithTitle } from '../utils/SharedWithMe'
 import Share from '../models/Share'
+import ShareTypes  from '../mixins/ShareTypes'
 import SharingEntryInternal from '../components/SharingEntryInternal'
 import SharingEntrySimple from '../components/SharingEntrySimple'
 import SharingInput from '../components/SharingInput'
@@ -70,20 +71,11 @@ import SharingInput from '../components/SharingInput'
 import SharingLinkList from './SharingLinkList'
 import SharingList from './SharingList'
 
-const SHARE_TYPES = {
-	SHARE_TYPE_USER: OC.Share.SHARE_TYPE_USER, 
-	SHARE_TYPE_GROUP: OC.Share.SHARE_TYPE_GROUP, 
-	SHARE_TYPE_LINK: OC.Share.SHARE_TYPE_LINK, 
-	SHARE_TYPE_EMAIL: OC.Share.SHARE_TYPE_EMAIL, 
-	SHARE_TYPE_REMOTE: OC.Share.SHARE_TYPE_REMOTE, 
-	SHARE_TYPE_CIRCLE: OC.Share.SHARE_TYPE_CIRCLE, 
-	SHARE_TYPE_GUEST: OC.Share.SHARE_TYPE_GUEST, 
-	SHARE_TYPE_REMOTE_GROUP: OC.Share.SHARE_TYPE_REMOTE_GROUP,
-	SHARE_TYPE_ROOM: OC.Share.SHARE_TYPE_ROOM
-}
 
 export default {
 	name: 'SharingTab',
+
+	mixins: [ShareTypes],
 
 	components: {
 		ActionButton,
@@ -244,9 +236,13 @@ export default {
 		 */
 		processShares({ data }) {
 			if (data.ocs && data.ocs.data && data.ocs.data.length > 0) {
-				const shares = data.ocs.data.map(share => new Share(share))
-				this.linkShares = shares.filter(share => share.type === SHARE_TYPES.SHARE_TYPE_LINK)
-				this.shares = shares.filter(share => share.type !== SHARE_TYPES.SHARE_TYPE_LINK)
+				// create Share objects and sort by newest
+				const shares = data.ocs.data
+					.map(share => new Share(share))
+					.sort((a, b) => b.createdTime - a.createdTime)
+				
+				this.linkShares = shares.filter(share => share.type === this.SHARE_TYPES.SHARE_TYPE_LINK || share.type === this.SHARE_TYPES.SHARE_TYPE_EMAIL)
+				this.shares = shares.filter(share => share.type !== this.SHARE_TYPES.SHARE_TYPE_LINK && share.type !== this.SHARE_TYPES.SHARE_TYPE_EMAIL)
 			}
 		},
 

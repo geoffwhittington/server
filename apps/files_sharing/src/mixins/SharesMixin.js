@@ -26,6 +26,7 @@ import PQueue from 'p-queue'
 import debounce from 'debounce'
 
 import Share from '../models/Share'
+import ShareTypes from './ShareTypes'
 import Config from '../services/ConfigService'
 
 const shareUrl = generateOcsUrl('apps/files_sharing/api/v1', 2) + 'shares'
@@ -34,6 +35,8 @@ const headers = {
 };
 
 export default {
+	mixins: [ShareTypes],
+
 	props: {
 		fileInfo: {
 			type: Object,
@@ -68,6 +71,18 @@ export default {
 			 * ! do not remove it ot you'll lose all reactivity here
 			 */
 			reactiveState: this.share && this.share.state,
+
+			SHARE_TYPES: {
+				SHARE_TYPE_USER: OC.Share.SHARE_TYPE_USER, 
+				SHARE_TYPE_GROUP: OC.Share.SHARE_TYPE_GROUP, 
+				SHARE_TYPE_LINK: OC.Share.SHARE_TYPE_LINK, 
+				SHARE_TYPE_EMAIL: OC.Share.SHARE_TYPE_EMAIL, 
+				SHARE_TYPE_REMOTE: OC.Share.SHARE_TYPE_REMOTE, 
+				SHARE_TYPE_CIRCLE: OC.Share.SHARE_TYPE_CIRCLE, 
+				SHARE_TYPE_GUEST: OC.Share.SHARE_TYPE_GUEST, 
+				SHARE_TYPE_REMOTE_GROUP: OC.Share.SHARE_TYPE_REMOTE_GROUP,
+				SHARE_TYPE_ROOM: OC.Share.SHARE_TYPE_ROOM
+			}
 		}
 	},
 

@@ -23,10 +23,10 @@
 <template>
 	<ul>
 		<!-- If no link shares, show the add link default entry -->
-		<SharingEntryLink v-if="hasShares" :file-info="fileInfo" @add:share="addShare" />
+		<SharingEntryLink v-if="!hasLinkShares" :file-info="fileInfo" @add:share="addShare" />
 
 		<!-- Else we display the list -->
-		<template v-else>
+		<template v-if="hasShares">
 			<!-- using shares[index] to work with .sync -->
 			<SharingEntryLink v-for="(share, index) in shares" :key="share.id"
 				:share.sync="shares[index]" :file-info="fileInfo"
@@ -38,10 +38,14 @@
 </template>
 
 <script>
+import Share from '../models/Share'
+import ShareTypes  from '../mixins/ShareTypes'
 import SharingEntryLink from '../components/SharingEntryLink'
 
 export default {
 	name: 'SharingLinkList',
+
+	mixins: [ShareTypes],
 
 	components: {
 		SharingEntryLink
@@ -61,8 +65,20 @@ export default {
 	},
 
 	computed: {
+		/**
+		 * Do we have link shares?
+		 * Using this to still show the `new link share`
+		 * button regardless of mail shares
+		 */
+		hasLinkShares() {
+			return this.shares.filter(share => share.type === this.SHARE_TYPES.SHARE_TYPE_LINK).length > 0
+		},
+
+		/**
+		 * Do we have any link or email shares?
+		 */
 		hasShares() {
-			return this.shares.length === 0
+			return this.shares.length > 0
 		}
 	},
 
@@ -71,10 +87,11 @@ export default {
 		 * Add a new share into the link shares list
 		 * and return the newly created share component
 		 * 
-		 * @returns {Object}
+		 * @param {Share} share the share to add to the array
+		 * @param {Function} resolve a function to run after the share is added and its component initialized
 		 */
 		addShare(share, resolve) {
-			this.shares.push(share)
+			this.shares.unshift(share)
 			this.awaitForShare(share, resolve)
 		},
 
