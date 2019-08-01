@@ -119,6 +119,13 @@ export default {
 			const result = request.data
 
 		},
+
+		/**
+		 * Get the sharing recommendations
+		 * TODO: clean this function! :O
+		 * 
+		 * @returns {Array}
+		 */
 		async getRecommendations() {
 			this.loading = true
 
@@ -334,7 +341,7 @@ export default {
 					previousUuid = grouped[i].uuid;
 				}
 
-				console.info(results, exactMatches);
+				console.info('recommendations', results, exactMatches);
 			}
 		}
 	}

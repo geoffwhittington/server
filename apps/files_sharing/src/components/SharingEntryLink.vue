@@ -31,15 +31,10 @@
 
 		<!-- clipboard -->
 		<Actions ref="copyButton" v-if="share && !isEmailShareType  && share.token"
-			:disable-tooltip="true" class="sharing-entry__copy"
-			v-tooltip.auto="{
-				// make sure to manually show the tooltip aagain after click
-				// as it will take away the focus and close the tooltip
-				show: copied,
-				content: clipboardTooltip,
-				trigger: copied ? 'manual' : 'hover'
-			}">
-			<ActionLink :href="shareLink" target="_blank" icon="icon-clippy" @click.stop.prevent="copyLink">{{ shareLink }}</ActionLink>
+			:disable-tooltip="true" class="sharing-entry__copy">
+			<ActionLink :href="shareLink" target="_blank"
+				:icon="copied && copySuccess ? 'icon-checkmark-color' : 'icon-clippy'"
+				@click.stop.prevent="copyLink">{{ clipboardTooltip }}</ActionLink>
 		</Actions>
 
 		<!-- pensing actions -->
@@ -644,6 +639,10 @@ export default {
 		}
 	}
 
+	.icon-checkmark-color {
+		opacity: 1;
+	}
+	
 	&::v-deep .action-item__menu {
 		li.error {
 			animation: error 1s ease-in-out;

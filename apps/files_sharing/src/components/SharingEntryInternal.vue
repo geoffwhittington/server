@@ -1,11 +1,16 @@
 
 <template>
-	<SharingEntrySimple :title="t('files_sharing', 'Copy internal link')"
+	<SharingEntrySimple
+		class="sharing-entry__internal"
+		:title="t('files_sharing', 'Internal link')"
 		:subtitle="internalLinkSubtitle">
 		<template #avatar>
 			<div class="avatar-external icon-external-white"></div>
 		</template>
-		<ActionLink :href="internalLink" target="_blank" icon="icon-clippy" @click.stop.prevent="copyLink">{{ clipboardTooltip }}</ActionLink>
+		
+		<ActionLink :href="internalLink" target="_blank"
+			:icon="copied && copySuccess ? 'icon-checkmark-color' : 'icon-clippy'"
+			@click.prevent="copyLink">{{ clipboardTooltip }}</ActionLink>
 	</SharingEntrySimple>
 </template>
 
@@ -89,23 +94,7 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-.sharing-entry {
-	display: flex;
-	align-items: center;
-	height: 44px;
-	&__desc {
-		display: flex;
-		flex-direction: column;
-		justify-content: space-between;
-		padding: 8px;
-		line-height: 1.2em;
-		p {
-			color: var(--color-text-maxcontrast);
-		}
-	}
-	&__actions {
-		margin-left: auto;
-	}
+.sharing-entry__internal {
 	.avatar-external {
 		width: 32px;
 		height: 32px;
@@ -114,6 +103,9 @@ export default {
 		background-color: var(--color-text-maxcontrast);
 		border-radius: 50%;
 		flex-shrink: 0;
+	}
+	.icon-checkmark-color {
+		opacity: 1;
 	}
 }
 </style>
