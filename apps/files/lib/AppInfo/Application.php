@@ -30,9 +30,12 @@ use OCA\Files\Activity\Helper;
 use OCA\Files\Collaboration\Resources\Listener;
 use OCA\Files\Collaboration\Resources\ResourceProvider;
 use OCA\Files\Controller\ApiController;
+use OCA\Files\Event\LoadAdditionalScriptsEvent;
+use OCA\Files\Listener\LegacyLoadAdditionalScripts;
 use OCP\AppFramework\App;
 use \OCA\Files\Service\TagService;
 use OCP\Collaboration\Resources\IManager;
+use OCP\EventDispatcher\IEventDispatcher;
 use \OCP\IContainer;
 use OCA\Files\Controller\ViewController;
 use OCA\Files\Capabilities;
@@ -66,7 +69,7 @@ class Application extends App {
 				$server->getURLGenerator(),
 				$c->query('L10N'),
 				$server->getConfig(),
-				$server->getEventDispatcher(),
+				$server->query(IEventDispatcher::class),
 				$server->getUserSession(),
 				$server->getAppManager(),
 				$server->getRootFolder(),
@@ -110,5 +113,9 @@ class Application extends App {
 		$resourceManager = $container->query(IManager::class);
 		$resourceManager->registerResourceProvider(ResourceProvider::class);
 		Listener::register($server->getEventDispatcher());
+
+		/** @var IEventDispatcher $dispatcher */
+		$dispatcher = $container->query(IEventDispatcher::class);
+		$dispatcher->addServiceListener(LoadAdditionalScriptsEvent::class, LegacyLoadAdditionalScripts::class);
 	}
 }
