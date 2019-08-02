@@ -62,7 +62,7 @@ class EmptyFeaturePolicy {
 	 * @return $this
 	 * @since 17.0.0
 	 */
-	public function addAllowedAutoplayDomain(string $domain) {
+	public function addAllowedAutoplayDomain(string $domain): self {
 		$this->autoplayDomains[] = $domain;
 		return $this;
 	}
@@ -74,7 +74,7 @@ class EmptyFeaturePolicy {
 	 * @return $this
 	 * @since 17.0.0
 	 */
-	public function addAllowedCameraDomain(string $domain) {
+	public function addAllowedCameraDomain(string $domain): self {
 		$this->cameraDomains[] = $domain;
 		return $this;
 	}
@@ -86,7 +86,7 @@ class EmptyFeaturePolicy {
 	 * @return $this
 	 * @since 17.0.0
 	 */
-	public function addAllowedFullScreenDomain(string $domain) {
+	public function addAllowedFullScreenDomain(string $domain): self {
 		$this->fullscreenDomains[] = $domain;
 		return $this;
 	}
@@ -98,7 +98,7 @@ class EmptyFeaturePolicy {
 	 * @return $this
 	 * @since 17.0.0
 	 */
-	public function addAllowedGeoLocationDomain(string $domain) {
+	public function addAllowedGeoLocationDomain(string $domain): self {
 		$this->geolocationDomains[] = $domain;
 		return $this;
 	}
@@ -110,7 +110,7 @@ class EmptyFeaturePolicy {
 	 * @return $this
 	 * @since 17.0.0
 	 */
-	public function addAllowedMicrophoneDomain(string $domain) {
+	public function addAllowedMicrophoneDomain(string $domain): self {
 		$this->microphoneDomains[] = $domain;
 		return $this;
 	}
@@ -122,7 +122,7 @@ class EmptyFeaturePolicy {
 	 * @return $this
 	 * @since 17.0.0
 	 */
-	public function addAllowedPaymentDomains(string $domain) {
+	public function addAllowedPaymentDomains(string $domain): self {
 		$this->paymentDomains[] = $domain;
 		return $this;
 	}
@@ -133,7 +133,7 @@ class EmptyFeaturePolicy {
 	 * @return string
 	 * @since 17.0.0
 	 */
-	public function buildPolicy() {
+	public function buildPolicy(): string {
 		$policy = '';
 
 		if (empty($this->autoplayDomains)) {
