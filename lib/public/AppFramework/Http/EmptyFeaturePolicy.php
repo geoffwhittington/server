@@ -37,22 +37,22 @@ namespace OCP\AppFramework\Http;
  */
 class EmptyFeaturePolicy {
 
-	/** @var array of allowed domains to autoplay media */
+	/** @var string[] of allowed domains to autoplay media */
 	protected $autoplayDomains = null;
 
-	/** @var array of allowed domains that can access the camera */
+	/** @var string[] of allowed domains that can access the camera */
 	protected $cameraDomains = null;
 
-	/** @var array of allowed domains that can use fullscreen */
+	/** @var string[] of allowed domains that can use fullscreen */
 	protected $fullscreenDomains = null;
 
-	/** @var array of allowed domains that can use the geolocation of the device */
+	/** @var string[] of allowed domains that can use the geolocation of the device */
 	protected $geolocationDomains = null;
 
-	/** @var array of allowed domains that can use the microphone */
+	/** @var string[] of allowed domains that can use the microphone */
 	protected $microphoneDomains = null;
 
-	/** @var array of allowed domains that can use the payment API */
+	/** @var string[] of allowed domains that can use the payment API */
 	protected $paymentDomains = null;
 
 	/**

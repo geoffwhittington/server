@@ -24,7 +24,6 @@ declare(strict_types=1);
 
 namespace OC\Security\FeaturePolicy;
 
-use OC\Security\FeaturePolicy\FeaturePolicy;
 use OCP\AppFramework\Http\EmptyFeaturePolicy;
 use OCP\EventDispatcher\IEventDispatcher;
 use OCP\Security\FeaturePolicy\AddFeaturePolicyEvent;
@@ -66,7 +65,7 @@ class FeaturePolicyManager {
 			if (\is_array($value)) {
 				$getter = 'get' . ucfirst($name);
 				$currentValues = \is_array($defaultPolicy->$getter()) ? $defaultPolicy->$getter() : [];
-				$defaultPolicy->$setter(array_values(array_unique(array_merge($currentValues, $value))));
+				$defaultPolicy->$setter(\array_values(\array_unique(\array_merge($currentValues, $value))));
 			} elseif (\is_bool($value)) {
 				$defaultPolicy->$setter($value);
 			}

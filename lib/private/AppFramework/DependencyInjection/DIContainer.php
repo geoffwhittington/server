@@ -232,9 +232,7 @@ class DIContainer extends SimpleContainer implements IAppContainer {
 				)
 			);
 			$dispatcher->registerMiddleware(
-				new OC\AppFramework\Middleware\Security\FeaturePolicyMiddleware(
-					$server->query(OC\Security\FeaturePolicy\FeaturePolicyManager::class)
-				)
+				$server->query(OC\AppFramework\Middleware\Security\FeaturePolicyMiddleware::class)
 			);
 			$dispatcher->registerMiddleware(
 				new OC\AppFramework\Middleware\Security\PasswordConfirmationMiddleware(
