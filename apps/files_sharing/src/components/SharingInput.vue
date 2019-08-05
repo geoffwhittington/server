@@ -22,18 +22,26 @@
 
 <template>
 	<Multiselect class="sharing-input" :searchable="true" :loading="loading"
-		:internal-search="false" :options="options" :limit="3"
-		:placeholder="inputPlaceholder" :user-select="true" :hide-selected="true"
-		:multiple="true" :taggable="true"
-		@search-change="asyncFind" @tag="addShare" />
+		:internal-search="false" :limit="3"
+		:options="options"  :placeholder="inputPlaceholder"
+		:user-select="true" :hide-selected="true"
+		:preserve-search="true" :preselect-first="true"
+		@search-change="asyncFind" @select="addShare">
+		<template #noOptions>{{ noOptionText }}</template>
+	</Multiselect>
 </template>
 
 <script>
-import axios from 'nextcloud-axios'
 import { generateOcsUrl } from 'nextcloud-router'
+import { getCurrentUser } from 'nextcloud-auth'
+import axios from 'nextcloud-axios'
+import debounce from 'debounce'
 import Multiselect from 'nextcloud-vue/dist/Components/Multiselect'
+
 import Config from '../services/ConfigService'
 import Share from '../models/Share'
+import ShareRequests from '../mixins/ShareRequests'
+import ShareTypes from '../mixins/ShareTypes'
 
 export default {
 	name:  'SharingInput',
@@ -42,8 +50,15 @@ export default {
 		Multiselect
 	},
 
+	mixins: [ShareTypes, ShareRequests],
+
 	props: {
 		shares: {
+			type: Array,
+			default: () => [],
+			required: true
+		},
+		linkShares: {
 			type: Array,
 			default: () => [],
 			required: true
@@ -55,7 +70,7 @@ export default {
 		},
 		reshare: {
 			type: Share,
-			default: false
+			default: {}
 		}
 	},
 
@@ -63,8 +78,9 @@ export default {
 		return {
 			config: new Config(),
 			loading: false,
-			options: [],
-			recommendations: []
+			query: '',
+			recommendations: [],
+			suggestions: []
 		}
 	},
 
@@ -84,6 +100,24 @@ export default {
 			}
 
 			return 	t('files_sharing', 'Name...');
+		},
+
+		isValidQuery() {
+			return this.query.trim() !== '' && this.query.length > this.config.minSearchStringLength
+		},
+
+		options() {
+			if (this.isValidQuery) {
+				return this.suggestions
+			}
+			return this.recommendations
+		},
+
+		noOptionText() {
+			if (this.isValidQuery) {
+				return t('files_sharing', 'No results')
+			}
+			return t('files_sharing', 'No recommendations. Start typing.')
 		}
 	},
 
@@ -93,38 +127,77 @@ export default {
 
 	methods: {
 		async asyncFind(query, id) {
-			if (query.length > this.config.minSearchStringLength) {
-				this.getSuggestions(query)
+			// save current query to check if we display
+			// recommendations or search results
+			this.query = query.trim()
+			if (this.isValidQuery) {
+				await this.debounceGetSuggestions(query)
 			}
-			console.info(query, id);	
 		},
-		addShare(query, id) {
-			console.info(query, id);
-		},
+
+		/**
+		 * Get suggestions
+		 * 
+		 * @param {string} search the search query
+		 * @param {boolean} [lookup=false] search on lookup server
+		 */
 		async getSuggestions(search, lookup) {
 			this.loading = true
 			lookup = lookup || false
+			console.info(search, lookup);	
 
 			const request = await axios.get(generateOcsUrl('apps/files_sharing/api/v1') + 'sharees', {
 				params: {
 					format: 'json',
-					itemType: this.fileInfo.type,
+					itemType: this.fileInfo.type === 'dir' ? 'folder' : 'file',
 					search,
 					lookup,
 					perPage: this.config.maxAutocompleteResults
 				}
 			})
 
-			this.loading = false
-			const result = request.data
+			if (request.data.ocs.meta.statuscode !== 100) {
+				console.error('Error fetching suggestions', request);
+				return
+			}
+			
+			const data = request.data.ocs.data
+			const exact = request.data.ocs.data.exact
+			data.exact = [] // removing exact from general results
 
+			// flatten array of arrays
+			const rawExactSuggestions = Object.values(exact).reduce((arr, elem) => arr.concat(elem), [])
+			const rawSuggestions = Object.values(data).reduce((arr, elem) => arr.concat(elem), [])
+	
+			// remove invalid data and format to user-select layout
+			const exactSuggestions = this.filterOutExistingShares(rawExactSuggestions)
+				.map(share => this.formatForMultiselect(share))
+			const suggestions = this.filterOutExistingShares(rawSuggestions)
+				.map(share => this.formatForMultiselect(share))
+
+			const lookupEntry = [data.lookupEnabled ? {
+				isNoUser: true,
+				displayName: t('files_sharing', 'Search globally'),
+				lookup: true
+			} : {}]
+
+			this.suggestions = exactSuggestions.concat(suggestions).concat(lookupEntry)
+
+			this.loading = false
+			console.info('suggestions', this.suggestions)
 		},
 
 		/**
-		 * Get the sharing recommendations
-		 * TODO: clean this function! :O
+		 * Debounce getSuggestions
 		 * 
-		 * @returns {Array}
+		 * @param {...*} args the arguments
+		 */
+		debounceGetSuggestions: debounce(function(...args) {
+			this.getSuggestions(...args)
+		}, 300),
+
+		/**
+		 * Get the sharing recommendations
 		 */
 		async getRecommendations() {
 			this.loading = true
@@ -135,213 +208,164 @@ export default {
 					itemType: this.fileInfo.type
 				}
 			})
+
+			if (request.data.ocs.meta.statuscode !== 100) {
+				console.error('Error fetching recommendations', request);
+				return
+			}
+
+			const exact = request.data.ocs.data.exact
+
+			// flatten array of arrays
+			const rawRecommendations = Object.values(exact).reduce((arr, elem) => arr.concat(elem), [])
 			
+			// remove invalid data and format to user-select layout
+			this.recommendations = this.filterOutExistingShares(rawRecommendations)
+				.map(share => this.formatForMultiselect(share))
+
 			this.loading = false
-			const result = request.data
-			if (result.ocs.meta.statuscode === 100) {
-				var filter = (users, groups, remotes, remote_groups, emails, circles, rooms) => {
-					if (typeof(emails) === 'undefined') {
-						emails = [];
-					}
-					if (typeof(circles) === 'undefined') {
-						circles = [];
-					}
-					if (typeof(rooms) === 'undefined') {
-						rooms = [];
+			console.info('recommendations', this.recommendations)
+		},
+
+		/**
+		 * Filter out existing shares from
+		 * the provided shares search results
+		 * 
+		 * @param {Object[]} shares the array of shares object
+		 */
+		filterOutExistingShares(shares) {
+			return shares.reduce((arr, share) => {
+				// only check proper objects
+				if (typeof share !== 'object') {
+					return arr
+				}
+				try {
+					// filter out current user
+					if (share.value.shareWith === getCurrentUser().uid) {
+						return arr
 					}
 
-					var usersLength;
-					var groupsLength;
-					var remotesLength;
-					var remoteGroupsLength;
-					var emailsLength;
-					var circlesLength;
-					var roomsLength;
+					// filter out the owner of the share
+					if (this.reshare && share.value.shareWith === this.reshare.owner) {
+						return arr
+					}
 
-					var i, j;
-
-					//Filter out the current user
-					usersLength = users.length;
-					for (i = 0; i < usersLength; i++) {
-						if (users[i].value.shareWith === OC.currentUser) {
-							users.splice(i, 1);
-							break;
+					// filter out existing mail shares
+					if (share.value.shareType === this.SHARE_TYPES.SHARE_TYPE_EMAIL) {
+						const emails = this.linkShares.map(elem => elem.shareWith)
+						if (emails.indexOf(share.value.shareWith.trim()) !== -1) {
+							return arr
 						}
 					}
 
-					// Filter out the owner of the share
-					if (this.reshare) {
-						usersLength = users.length;
-						for (i = 0 ; i < usersLength; i++) {
-							if (users[i].value.shareWith === this.reshare.owner) {
-								users.splice(i, 1);
-								break;
-							}
+					// filter out existing shares
+					else {
+						// creating an object of uid => type
+						const sharesObj = this.shares.reduce((obj, elem) => {
+							obj[elem.shareWith] = elem.type
+							return obj
+						}, {})
+
+
+						// if shareWith is the same and the share type too, ignore it
+						const key = share.value.shareWith.trim()
+						if (key in sharesObj
+							&& sharesObj[key] === share.value.shareType) {
+							return arr
 						}
 					}
 
-					var sharesLength = this.shares.length;
-
-					// Now filter out all sharees that are already shared with
-					for (i = 0; i < sharesLength; i++) {
-						var share = this.shares[i];
-
-						if (share.share_type === OC.Share.SHARE_TYPE_USER) {
-							usersLength = users.length;
-							for (j = 0; j < usersLength; j++) {
-								if (users[j].value.shareWith === share.share_with) {
-									users.splice(j, 1);
-									break;
-								}
-							}
-						} else if (share.share_type === OC.Share.SHARE_TYPE_GROUP) {
-							groupsLength = groups.length;
-							for (j = 0; j < groupsLength; j++) {
-								if (groups[j].value.shareWith === share.share_with) {
-									groups.splice(j, 1);
-									break;
-								}
-							}
-						} else if (share.share_type === OC.Share.SHARE_TYPE_REMOTE) {
-							remotesLength = remotes.length;
-							for (j = 0; j < remotesLength; j++) {
-								if (remotes[j].value.shareWith === share.share_with) {
-									remotes.splice(j, 1);
-									break;
-								}
-							}
-						} else if (share.share_type === OC.Share.SHARE_TYPE_REMOTE_GROUP) {
-							remoteGroupsLength = remote_groups.length;
-							for (j = 0; j < remoteGroupsLength; j++) {
-								if (remote_groups[j].value.shareWith === share.share_with) {
-									remote_groups.splice(j, 1);
-									break;
-								}
-							}
-						} else if (share.share_type === OC.Share.SHARE_TYPE_EMAIL) {
-							emailsLength = emails.length;
-							for (j = 0; j < emailsLength; j++) {
-								if (emails[j].value.shareWith === share.share_with) {
-									emails.splice(j, 1);
-									break;
-								}
-							}
-						} else if (share.share_type === OC.Share.SHARE_TYPE_CIRCLE) {
-							circlesLength = circles.length;
-							for (j = 0; j < circlesLength; j++) {
-								if (circles[j].value.shareWith === share.share_with) {
-									circles.splice(j, 1);
-									break;
-								}
-							}
-						} else if (share.share_type === OC.Share.SHARE_TYPE_ROOM) {
-							roomsLength = rooms.length;
-							for (j = 0; j < roomsLength; j++) {
-								if (rooms[j].value.shareWith === share.share_with) {
-									rooms.splice(j, 1);
-									break;
-								}
-							}
-						}
-					}
-				};
-
-				filter(
-					result.ocs.data.exact.users,
-					result.ocs.data.exact.groups,
-					result.ocs.data.exact.remotes,
-					result.ocs.data.exact.remote_groups,
-					result.ocs.data.exact.emails,
-					result.ocs.data.exact.circles,
-					result.ocs.data.exact.rooms
-				);
-
-				var exactUsers   = result.ocs.data.exact.users;
-				var exactGroups  = result.ocs.data.exact.groups;
-				var exactRemotes = result.ocs.data.exact.remotes || [];
-				var exactRemoteGroups = result.ocs.data.exact.remote_groups || [];
-				var exactEmails = [];
-				if (typeof(result.ocs.data.emails) !== 'undefined') {
-					exactEmails = result.ocs.data.exact.emails;
+					// ALL GOOD
+					// let's add the suggestion
+					arr.push(share)
+				} finally {
+					// Always return the current array
+					return arr
 				}
-				var exactCircles = [];
-				if (typeof(result.ocs.data.circles) !== 'undefined') {
-					exactCircles = result.ocs.data.exact.circles;
-				}
-				var exactRooms = [];
-				if (typeof(result.ocs.data.rooms) !== 'undefined') {
-					exactRooms = result.ocs.data.exact.rooms;
-				}
+			}, [])
+		},
 
-				var exactMatches = exactUsers.concat(exactGroups).concat(exactRemotes).concat(exactRemoteGroups).concat(exactEmails).concat(exactCircles).concat(exactRooms);
+		/**
+		 * Get the icon based on the share type
+		 * @param {number} type the share type
+		 * @returns {string} the icon class
+		 */
+		shareTypeToIcon(type) {
+			switch (type) {
+				case this.SHARE_TYPES.SHARE_TYPE_GUEST:
+				case this.SHARE_TYPES.SHARE_TYPE_REMOTE:
+				case this.SHARE_TYPES.SHARE_TYPE_USER:
+					return 'icon-user'
+					break;
+				case this.SHARE_TYPES.SHARE_TYPE_REMOTE_GROUP:
+				case this.SHARE_TYPES.SHARE_TYPE_GROUP:
+					return 'icon-group'
+					break;
+				case this.SHARE_TYPES.SHARE_TYPE_EMAIL:
+					return 'icon-mail'
+					break;
+				case this.SHARE_TYPES.SHARE_TYPE_CIRCLE:
+					return 'icon-circle'
+					break;
+				case this.SHARE_TYPES.SHARE_TYPE_ROOM:
+					return 'icon-room'
+					break;
+			
+				default:
+					return ''
+					break;
+			}
+		},
 
-				filter(
-					result.ocs.data.users,
-					result.ocs.data.groups,
-					result.ocs.data.remotes,
-					result.ocs.data.remote_groups,
-					result.ocs.data.emails,
-					result.ocs.data.circles,
-					result.ocs.data.rooms
-				);
+		/** 
+		 * Format shares for the multiselect options
+		 * @param {Object} result
+		 * @returns {Object}
+		 */
+		formatForMultiselect(result) {
+			let desc
+			if (result.value.shareType === this.SHARE_TYPES.SHARE_TYPE_REMOTE
+				|| result.value.shareType === this.SHARE_TYPES.SHARE_TYPE_REMOTE_GROUP) {
+				desc = t('files_sharing', 'on {server}', { server: result.value.server })
+			} else if (result.value.shareType === this.SHARE_TYPES.SHARE_TYPE_EMAIL) {
+				desc = result.value.shareWith
+			}
 
-				var users   = result.ocs.data.users;
-				var groups  = result.ocs.data.groups;
-				var remotes = result.ocs.data.remotes || [];
-				var remoteGroups = result.ocs.data.remote_groups || [];
-				var lookup = result.ocs.data.lookup || [];
-				var emails = [];
-				if (typeof(result.ocs.data.emails) !== 'undefined') {
-					emails = result.ocs.data.emails;
-				}
-				var circles = [];
-				if (typeof(result.ocs.data.circles) !== 'undefined') {
-					circles = result.ocs.data.circles;
-				}
-				var rooms = [];
-				if (typeof(result.ocs.data.rooms) !== 'undefined') {
-					rooms = result.ocs.data.rooms;
-				}
+			return {
+				shareWith: result.value.shareWith,
+				shareType: result.value.shareType,
+				user: result.uuid || result.value.shareWith,
+				displayName: result.name || result.label,
+				desc,
+				icon: this.shareTypeToIcon(result.value.shareType)
+			}
+		},
 
-				var suggestions = exactMatches.concat(users).concat(groups).concat(remotes).concat(remoteGroups).concat(emails).concat(circles).concat(rooms).concat(lookup);
+		/**
+		 * Process the new share request
+		 * @param {Object} value the multiselect option
+		 */
+		async addShare(value) {
+			if (value.lookup) {
+				return this.getSuggestions(this.query, true)
+			}
 
-				function dynamicSort(property) {
-					return function (a,b) {
-						var aProperty = '';
-						var bProperty = '';
-						if (typeof a[property] !== 'undefined') {
-							aProperty = a[property];
-						}
-						if (typeof b[property] !== 'undefined') {
-							bProperty = b[property];
-						}
-						return (aProperty < bProperty) ? -1 : (aProperty > bProperty) ? 1 : 0;
-					}
-				}
+			this.loading = true
+			try {
+				const path = this.fileInfo.path + this.fileInfo.name
+				const share = await this.createShare({
+					path,
+					shareType: value.shareType,
+					shareWith: value.shareWith
+				})
+				this.$emit('add:share', share)
 
-				/**
-				 * Sort share entries by uuid to properly group them
-				 */
-				var grouped = suggestions.sort(dynamicSort('uuid'));
+				this.getRecommendations()
 
-				var previousUuid = null;
-				var groupedLength = grouped.length;
-				var results = [];
-				/**
-				 * build the result array that only contains all contact entries from
-				 * merged contacts, if the search term matches its contact name
-				 */
-				for (var i = 0; i < groupedLength; i++) {
-					if (typeof grouped[i].uuid !== 'undefined' && grouped[i].uuid === previousUuid) {
-						grouped[i].merged = true;
-					}
-					if (typeof grouped[i].merged === 'undefined') {
-						results.push(grouped[i]);
-					}
-					previousUuid = grouped[i].uuid;
-				}
-
-				console.info('recommendations', results, exactMatches);
+			} catch(response) {
+				// already caugh on the createShare method
+			} finally {
+				this.loading = false
 			}
 		}
 	}
@@ -352,5 +376,20 @@ export default {
 .sharing-input {
 	width: 100%;
 	margin: 10px 0;
+
+	// properly style the lookup entry
+	.multiselect__option {
+		span[lookup] {
+			.avatardiv {
+				background-image: var(--icon-search-fff);
+				background-repeat: no-repeat;
+				background-position: center;
+				background-color: var(--color-text-maxcontrast) !important;
+				div {
+					display: none;
+				}
+			}
+		}
+	}
 }
 </style>

@@ -21,13 +21,13 @@
   -->
 
 <template>
-	<Tab :icon="icon" :name="name" :class="{'icon-loading': loading}">
+	<Tab :icon="icon" :name="name" :class="{ 'icon-loading': loading }">
 		<!-- error message -->
 		<div v-if="error" class="emptycontent">
 			<div class="icon icon-error"></div>
 			<h2>{{ error }}</h2>
 		</div>
-
+		
 		<!-- shares content -->
 		<template v-else>
 			<!-- shared with me information -->
@@ -38,13 +38,18 @@
 			</SharingEntrySimple>
 
 			<!-- add new share input -->
-			<SharingInput :shares="shares" :file-info="fileInfo" :reshare="reshare" />
+			<SharingInput v-if="!loading"
+				:shares="shares" :link-shares="linkShares"
+				:file-info="fileInfo" :reshare="reshare"
+				@add:share="addShare" />
 
 			<!-- link shares list -->
-			<SharingLinkList :shares="linkShares" :file-info="fileInfo" />
+			<SharingLinkList v-if="!loading"
+				:shares="linkShares" :file-info="fileInfo" />
 
 			<!-- other shares list -->
-			<SharingList :shares="shares" :file-info="fileInfo" />
+			<SharingList v-if="!loading"
+				:shares="shares" :file-info="fileInfo" />
 
 			<!-- internal link copy -->
 			<SharingEntryInternal :file-info="fileInfo" />
@@ -276,6 +281,18 @@ export default {
 					this.expirationInterval = setInterval(this.updateExpirationSubtitle, 10000, share)
 				}
 			}
+		},
+
+		/**
+		 * Insert share at top of arrays
+		 * 
+		 * @param {Share} share the share to insert
+		 */
+		addShare(share) {
+			if (share.type === this.SHARE_TYPES.SHARE_TYPE_EMAIL) {
+				this.linkShares.unshift(share)
+			}
+			this.shares.unshift(share)
 		}
 	}
 }

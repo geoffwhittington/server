@@ -20,22 +20,16 @@
  *
  */
 
-import { generateOcsUrl } from 'nextcloud-router/dist/index'
-import axios from 'nextcloud-axios'
 import PQueue from 'p-queue'
 import debounce from 'debounce'
 
 import Share from '../models/Share'
+import SharesRequests from './ShareRequests'
 import ShareTypes from './ShareTypes'
 import Config from '../services/ConfigService'
 
-const shareUrl = generateOcsUrl('apps/files_sharing/api/v1', 2) + 'shares'
-const headers = {
-	'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
-};
-
 export default {
-	mixins: [ShareTypes],
+	mixins: [SharesRequests, ShareTypes],
 
 	props: {
 		fileInfo: {
@@ -157,75 +151,6 @@ export default {
 	},
 
 	methods: {
-
-		/**
-		 * Create a new share
-		 *
-		 * @param {Object} data destructuring object
-		 * @param {string} data.path  path to the file/folder which should be shared
-		 * @param {number} data.shareType  0 = user; 1 = group; 3 = public link; 6 = federated cloud share
-		 * @param {string} data.shareWith  user/group id with which the file should be shared (optional for shareType > 1)
-		 * @param {boolean} [data.publicUpload=false]  allow public upload to a public shared folder
-		 * @param {string} [data.password]  password to protect public link Share with
-		 * @param {number} [data.permissions=31]  1 = read; 2 = update; 4 = create; 8 = delete; 16 = share; 31 = all (default: 31, for public shares: 1)
-		 * @param {boolean} [data.sendPasswordByTalk=false]
-		 * @param {string} [data.expireDate='']
-		 * @param {string} [data.label='']
-		 * @returns {Share} the new share
-		 * @throws {Error}
-		 */
-		async createShare({ path, permissions, shareType, shareWith, publicUpload, password, sendPasswordByTalk, expireDate, label }) {
-			try {
-				const request = await axios.post(shareUrl, { path, permissions, shareType, shareWith, publicUpload, password, sendPasswordByTalk, expireDate, label })
-				return new Share(request.data.ocs.data)
-			} catch (error) {
-				console.error('Error while creating share', error);
-				OC.Notification.showTemporary(t('files_sharing', 'Error creating the share'), { type: 'error'})
-				throw error
-			}
-		},
-
-		/**
-		 * Delete a share
-		 *
-		 * @param {number} id 
-		 * @throws {Error}
-		 */
-		async deleteShare(id) {
-			try {
-				await axios.delete(shareUrl + `/${id}`)
-				return true
-			} catch (error) {
-				console.error('Error while deleting share', error);
-				OC.Notification.showTemporary(t('files_sharing', 'Error deleting the share'), { type: 'error'})
-				throw error
-			}
-		},
-
-		/**
-		 * Update a share
-		 *
-		 * @param {number} id 
-		 * @param {Object} data 
-		 * @param {string} data.property
-		 * @param {any} data.value
-		 */
-		async updateShare(id, { property, value }) {
-			try {
-				// ocs api requires x-www-form-urlencoded
-				const data = new URLSearchParams();
-				data.append(property, value);
-				
-				await axios.put(shareUrl + `/${id}`, { [property]: value }, headers)
-				return true
-			} catch (error) {
-				console.error('Error while updating share', error);
-				OC.Notification.showTemporary(t('files_sharing', 'Error updating the share'), { type: 'error'})
-				const message = error.response.data.ocs.meta.message
-				throw { property, message }
-			}
-		},
-
 		/**
 		 * Check if a share is valid before
 		 * firing the request
