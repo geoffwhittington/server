@@ -27,6 +27,7 @@ import Share from '../models/Share'
 import SharesRequests from './ShareRequests'
 import ShareTypes from './ShareTypes'
 import Config from '../services/ConfigService'
+import { getCurrentUser } from 'nextcloud-auth';
 
 export default {
 	mixins: [SharesRequests, ShareTypes],
@@ -147,7 +148,12 @@ export default {
 					date: 'Select Date' // TODO: Translate
 				}
 			}
+		},
+
+		isShareOwner() {
+			return this.share.owner === getCurrentUser().uid
 		}
+
 	},
 
 	methods: {

@@ -1,0 +1,9 @@
+.icon-room {
+	@include icon-color('app', 'spreed', $color-black);
+}
+.icon-circle {
+	@include icon-color('circles', 'circles', $color-black, false, 2);
+}
+.icon-guests {
+	@include icon-color('app', 'guests', $color-black);
+}

@@ -90,7 +90,8 @@
 		<Actions v-else-if="!loading" class="sharing-entry__actions"
 			menu-align="right" :open.sync="open"
 			@close="onMenuClose">
-				<template v-if="share">
+			<template v-if="share">
+				<template v-if="isShareOwner">
 					<!-- folder -->
 					<template v-if="isFolder && fileHasCreatePermission && this.config.isPublicUploadEnabled">
 						<ActionCheckbox :checked="share.permissions === publicUploadRValue"
@@ -195,21 +196,22 @@
 							trigger: 'manual'
 						}"
 						@update:value="debounceQueueUpdate('note')" />
-
-					<ActionButton icon="icon-delete" :disabled="saving" @click.prevent="onDelete">
-						{{ t('files_sharing', 'Delete share') }}
-					</ActionButton>
-					<ActionButton v-if="!isEmailShareType"
-						class="new-share-link" icon="icon-add"
-						@click.prevent.stop="onNewLinkShare">
-						{{ t('files_sharing', 'Add another link') }}
-					</ActionButton>
 				</template>
 
-				<!-- Create new share -->
-				<ActionButton v-else class="new-share-link" icon="icon-add" @click.prevent.stop="onNewLinkShare">
-					{{ t('files_sharing', 'Create a new share link') }}
+				<ActionButton icon="icon-delete" :disabled="saving" @click.prevent="onDelete">
+					{{ t('files_sharing', 'Delete share') }}
 				</ActionButton>
+				<ActionButton v-if="!isEmailShareType"
+					class="new-share-link" icon="icon-add"
+					@click.prevent.stop="onNewLinkShare">
+					{{ t('files_sharing', 'Add another link') }}
+				</ActionButton>
+			</template>
+
+			<!-- Create new share -->
+			<ActionButton v-else class="new-share-link" icon="icon-add" @click.prevent.stop="onNewLinkShare">
+				{{ t('files_sharing', 'Create a new share link') }}
+			</ActionButton>
 		</Actions>
 
 		<!-- loading indicator to replace the menu -->
@@ -274,6 +276,11 @@ export default {
 		 * TODO: allow editing
 		 */
 		title() {
+			if (!this.isShareOwner) {
+				return t('files_sharing', 'Shared via link by {initiator}', {
+					initiator: this.share.ownerDisplayName
+				})
+			}
 			if (this.share && this.share.label && this.share.label.trim() !== '') {
 				return this.share.label
 			}
